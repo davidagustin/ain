@@ -29,11 +29,15 @@ const unsigned char DB_MN_HEIGHT = 'H';       // single record with last process
 const unsigned char DB_MN_ANCHOR_REWARD = 'r';
 const unsigned char DB_MN_CURRENT_TEAM = 't';
 const unsigned char DB_MN_FOUNDERS_DEBT = 'd';
+const unsigned char DB_MN_AUTH_TEAM = 'v';
+const unsigned char DB_MN_CONFIRM_TEAM = 'V';
 
 const unsigned char CMasternodesView::ID      ::prefix = DB_MASTERNODES;
 const unsigned char CMasternodesView::Operator::prefix = DB_MN_OPERATORS;
 const unsigned char CMasternodesView::Owner   ::prefix = DB_MN_OWNERS;
 const unsigned char CAnchorRewardsView::BtcTx ::prefix = DB_MN_ANCHOR_REWARD;
+const unsigned char CTeamView::AuthTeam       ::prefix = DB_MN_AUTH_TEAM;
+const unsigned char CTeamView::ConfirmTeam    ::prefix = DB_MN_CONFIRM_TEAM;
 
 std::unique_ptr<CCustomCSView> pcustomcsview;
 std::unique_ptr<CStorageLevelDB> pcustomcsDB;
@@ -408,6 +412,40 @@ CTeamView::CTeam CTeamView::GetCurrentTeam() const
     return Params().GetGenesisTeam();
 }
 
+void CTeamView::SetAnchorTeams(const CTeam& authTeam, const CTeam& confirmTeam, const int height)
+{
+    // Called after fork height
+    if (height < Params().GetConsensus().DakotaHeight) {
+        LogPrint(BCLog::ANCHORING, "%s: Called below fork. Fork: %d Arg height: %d\n",
+                 __func__, Params().GetConsensus().DakotaHeight, height);
+        return;
+    }
+
+    // Called every on team change intercal from fork height
+    if ((height - Params().GetConsensus().DakotaHeight) % Params().GetConsensus().mn.anchoringTeamChange != 0) {
+        LogPrint(BCLog::ANCHORING, "%s: Not called on interval of %d above or on fork height %d, arg height %d\n",
+                 __func__, Params().GetConsensus().mn.anchoringTeamChange, Params().GetConsensus().DakotaHeight, height);
+        return;
+    }
+
+    WriteBy<AuthTeam>(height, authTeam);
+    WriteBy<ConfirmTeam>(height, confirmTeam);
+}
+
+boost::optional<CTeamView::CTeam> CTeamView::GetAuthTeam(int height) const
+{
+    height -= (height % Params().GetConsensus().mn.anchoringTeamChange);
+
+    return ReadBy<AuthTeam, CTeam>(height);
+}
+
+boost::optional<CTeamView::CTeam> CTeamView::GetConfirmTeam(int height) const
+{
+    height -= (height % Params().GetConsensus().mn.anchoringTeamChange);
+
+    return ReadBy<ConfirmTeam, CTeam>(height);
+}
+
 /*
  *  CAnchorRewardsView
  */
@@ -458,6 +496,82 @@ CTeamView::CTeam CCustomCSView::CalcNextTeam(const uint256 & stakeModifier)
         newTeam.insert(it->second);
     }
     return newTeam;
+}
+
+enum AnchorTeams {
+    AuthTeam,
+    ConfirmTeam
+};
+
+void CCustomCSView::CalcAnchoringTeams(const uint256 & stakeModifier, const CBlockIndex *pindexNew)
+{
+    std::set<uint256> masternodeIDs;
+    int blockSample{7 * 2880}; // One week
+    const CBlockIndex* pindex = pindexNew;
+
+    // Get active MNs from last week's worth of blocks
+    for (int i{0}; pindex && i < blockSample; pindex = pindex->pprev, ++i) {
+        CKeyID minter;
+        if (pindex->GetBlockHeader().ExtractMinterKey(minter)) {
+            LOCK(cs_main);
+            auto id = pcustomcsview->GetMasternodeIdByOperator(minter);
+            if (id) {
+                masternodeIDs.insert(*id);
+            }
+        }
+    }
+
+    std::map<arith_uint256, CKeyID, std::less<arith_uint256>> authMN;
+    std::map<arith_uint256, CKeyID, std::less<arith_uint256>> confirmMN;
+    ForEachMasternode([&masternodeIDs, &stakeModifier, &authMN, &confirmMN] (uint256 const & id, CMasternode node) {
+        if(!node.IsActive())
+            return true;
+
+        // Not in our list of MNs from last week, skip.
+        if (masternodeIDs.find(id) == masternodeIDs.end()) {
+            return true;
+        }
+
+        CDataStream authStream{SER_GETHASH, PROTOCOL_VERSION};
+        authStream << id << stakeModifier << static_cast<int>(AnchorTeams::AuthTeam);
+        authMN.insert(std::make_pair(UintToArith256(Hash(authStream.begin(), authStream.end())), node.operatorAuthAddress));
+
+        CDataStream confirmStream{SER_GETHASH, PROTOCOL_VERSION};
+        confirmStream << id << stakeModifier << static_cast<int>(AnchorTeams::ConfirmTeam);
+        confirmMN.insert(std::make_pair(UintToArith256(Hash(confirmStream.begin(), confirmStream.end())), node.operatorAuthAddress));
+
+        return true;
+    });
+
+    int anchoringTeamSize = Params().GetConsensus().mn.anchoringTeamSize;
+
+    CTeam authTeam;
+    auto && it = authMN.begin();
+    for (int i = 0; i < anchoringTeamSize && it != authMN.end(); ++i, ++it) {
+        authTeam.insert(it->second);
+    }
+
+    CTeam confirmTeam;
+    it = confirmMN.begin();
+    for (int i = 0; i < anchoringTeamSize && it != confirmMN.end(); ++i, ++it) {
+        confirmTeam.insert(it->second);
+    }
+
+    {
+        LOCK(cs_main);
+        pcustomcsview->SetAnchorTeams(authTeam, confirmTeam, pindexNew->height);
+    }
+
+    // Debug logging
+    LogPrint(BCLog::ANCHORING, "MNs found: %d Team sizes: %d\n", masternodeIDs.size(), authTeam.size());
+
+    for (auto& item : authTeam) {
+        LogPrint(BCLog::ANCHORING, "Auth team operator addresses: %s\n", item.ToString());
+    }
+
+    for (auto& item : confirmTeam) {
+        LogPrint(BCLog::ANCHORING, "Confirm team operator addresses: %s\n", item.ToString());
+    }
 }
 
 /// @todo newbase move to networking?

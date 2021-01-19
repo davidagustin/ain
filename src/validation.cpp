@@ -2766,6 +2766,12 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
     m_chain.SetTip(pindexNew);
     UpdateTip(pindexNew, chainparams);
 
+    // Update teams every anchoringTeamChange number of blocks
+    if (pindexNew->nHeight >= Params().GetConsensus().DakotaHeight &&
+            (pindexNew->nHeight - Params().GetConsensus().DakotaHeight) % Params().GetConsensus().mn.anchoringTeamChange == 0) {
+        pcustomcsview->CalcAnchoringTeams(blockConnecting.stakeModifier, pindexNew);
+    }
+
     int64_t nTime6 = GetTimeMicros(); nTimePostConnect += nTime6 - nTime5; nTimeTotal += nTime6 - nTime1;
     LogPrint(BCLog::BENCH, "  - Connect postprocess: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime5) * MILLI, nTimePostConnect * MICRO, nTimePostConnect * MILLI / nBlocksTotal);
     LogPrint(BCLog::BENCH, "- Connect block: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime1) * MILLI, nTimeTotal * MICRO, nTimeTotal * MILLI / nBlocksTotal);

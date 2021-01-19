@@ -119,6 +119,7 @@ public:
         consensus.BayfrontMarinaHeight = 465150;
         consensus.BayfrontGardensHeight = 488300;
         consensus.ClarkeQuayHeight = 595738;
+        consensus.DakotaHeight = std::numeric_limits<int>::max();
 
         consensus.pos.diffLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 //        consensus.pos.nTargetTimespan = 14 * 24 * 60 * 60; // two weeks
@@ -155,6 +156,9 @@ public:
         consensus.mn.anchoringTeamSize = 5;
         consensus.mn.anchoringFrequency = 15;
         consensus.mn.anchoringLag = 15;
+
+        consensus.mn.anchoringTimeDepth = 3 * 60; // 3 hours
+        consensus.mn.anchoringTeamChange = 120; // Number of blocks
 
         consensus.token.creationFee = 100 * COIN;
         consensus.token.collateralAmount = 1 * COIN;
@@ -281,6 +285,7 @@ public:
         consensus.BayfrontMarinaHeight = 90470;
         consensus.BayfrontGardensHeight = 101342;
         consensus.ClarkeQuayHeight = 155000;
+        consensus.DakotaHeight = std::numeric_limits<int>::max();
 
         consensus.pos.diffLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 //        consensus.pos.nTargetTimespan = 14 * 24 * 60 * 60; // two weeks
@@ -317,6 +322,9 @@ public:
         consensus.mn.anchoringTeamSize = 5;
         consensus.mn.anchoringFrequency = 15;
         consensus.mn.anchoringLag = 15;
+
+        consensus.mn.anchoringTimeDepth = 3 * 60; // 3 hours
+        consensus.mn.anchoringTeamChange = 120; // Number of blocks
 
         consensus.token.creationFee = 100 * COIN;
         consensus.token.collateralAmount = 1 * COIN;
@@ -420,6 +428,7 @@ public:
         consensus.BayfrontMarinaHeight = 300;
         consensus.BayfrontGardensHeight = 300;
         consensus.ClarkeQuayHeight = 500;
+        consensus.DakotaHeight = std::numeric_limits<int>::max();
 
         consensus.pos.diffLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.pos.nTargetTimespan = 5 * 60; // 5 min == 10 blocks
@@ -454,6 +463,9 @@ public:
         consensus.mn.anchoringTeamSize = 5;
         consensus.mn.anchoringFrequency = 15;
         consensus.mn.anchoringLag = 15;
+
+        consensus.mn.anchoringTimeDepth = 3 * 60; // 3 hours
+        consensus.mn.anchoringTeamChange = 120; // Number of blocks
 
         consensus.spv.creationFee = 100000; // should be > bitcoin's dust
         consensus.spv.wallet_xpub = "tpubD9RkyYW1ixvD9vXVpYB1ka8rPZJaEQoKraYN7YnxbBxxsRYEMZgRTDRGEo1MzQd7r5KWxH8eRaQDVDaDuT4GnWgGd17xbk6An6JMdN4dwsY"; /// @note devnet matter
@@ -554,6 +566,7 @@ public:
         consensus.BayfrontMarinaHeight = 10000000;
         consensus.BayfrontGardensHeight = 10000000;
         consensus.ClarkeQuayHeight = 10000000;
+        consensus.DakotaHeight = 10000000;
 
         consensus.pos.diffLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.pos.nTargetTimespan = 14 * 24 * 60 * 60; // two weeks
@@ -588,6 +601,9 @@ public:
         consensus.mn.anchoringTeamSize = 8;
         consensus.mn.anchoringFrequency = 15;
         consensus.mn.anchoringLag = 15;
+
+        consensus.mn.anchoringTimeDepth = 0; // Any depth
+        consensus.mn.anchoringTeamChange = 15; // Number of blocks
 
         consensus.token.creationFee = 1 * COIN;
         consensus.token.collateralAmount = 10 * COIN;
@@ -739,6 +755,17 @@ void CRegTestParams::UpdateActivationParametersFromArgs(const ArgsManager& args)
             height = std::numeric_limits<int>::max();
         }
         consensus.ClarkeQuayHeight = static_cast<int>(height);
+    }
+
+    if (gArgs.IsArgSet("-dakotaheight")) {
+        int64_t height = gArgs.GetArg("-dakotaheight", consensus.DakotaHeight);
+        if (height < -1 || height >= std::numeric_limits<int>::max()) {
+            throw std::runtime_error(strprintf("Activation height %ld for Dakota is out of valid range. Use -1 to disable dakota features.", height));
+        } else if (height == -1) {
+            LogPrintf("Dakota disabled for testing\n");
+            height = std::numeric_limits<int>::max();
+        }
+        consensus.DakotaHeight = static_cast<int>(height);
     }
 
     if (!args.IsArgSet("-vbparams")) return;

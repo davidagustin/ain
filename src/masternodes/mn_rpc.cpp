@@ -4378,6 +4378,70 @@ static UniValue getcustomtx(const JSONRPCRequest& request)
 }
 
 
+UniValue getanchorteams(const JSONRPCRequest& request) {
+    RPCHelpMan{"getanchorteams",
+               "\nReturns the auth and confirm anchor masternode teams at current or specified height\n",
+               {
+                    {"blockHeight", RPCArg::Type::NUM, RPCArg::Optional::OMITTED, "The height of block which contain tx"}
+               },
+               RPCResult{
+                       "{\"auth\":[Address,...],\"confirm\":[Address,...]} Two sets of masternode operator addresses\n"
+               },
+               RPCExamples{
+                       HelpExampleCli("getanchorteams", "1005")
+                       + HelpExampleRpc("getanchorteams", "1005")
+               },
+    }.Check(request);
+
+    int blockHeight;
+
+    LOCK(cs_main);
+    if (!request.params[0].isNull()) {
+        blockHeight = request.params[0].get_int();
+    } else {
+        blockHeight = ::ChainActive().Height();
+    }
+
+    const auto authTeam = pcustomcsview->GetAuthTeam(blockHeight);
+    const auto confirmTeam = pcustomcsview->GetConfirmTeam(blockHeight);
+
+    UniValue result(UniValue::VOBJ);
+    UniValue authRes(UniValue::VARR);
+    UniValue confirmRes(UniValue::VARR);
+
+    if (authTeam) {
+        for (const auto& hash160 : *authTeam) {
+            const auto id = pcustomcsview->GetMasternodeIdByOperator(hash160);
+            if (id) {
+                const auto mn = pcustomcsview->GetMasternode(*id);
+                if (mn) {
+                    auto dest = mn->operatorType == 1 ? CTxDestination(PKHash(hash160)) : CTxDestination(WitnessV0KeyHash(hash160));
+                    authRes.push_back(EncodeDestination(dest));
+                }
+            }
+        }
+    }
+
+    if (confirmTeam) {
+        for (const auto& hash160 : *confirmTeam) {
+            const auto id = pcustomcsview->GetMasternodeIdByOperator(hash160);
+            if (id) {
+                const auto mn = pcustomcsview->GetMasternode(*id);
+                if (mn) {
+                    auto dest = mn->operatorType == 1 ? CTxDestination(PKHash(hash160)) : CTxDestination(WitnessV0KeyHash(hash160));
+                    confirmRes.push_back(EncodeDestination(dest));
+                }
+            }
+        }
+    }
+
+    result.pushKV("auth", authRes);
+    result.pushKV("confirm", confirmRes);
+
+    return result;
+}
+
+
 static const CRPCCommand commands[] =
 { //  category      name                  actor (function)     params
   //  ----------------- ------------------------    -----------------------     ----------
@@ -4388,6 +4452,7 @@ static const CRPCCommand commands[] =
     {"masternodes", "getmasternode",         &getmasternode,         {"mn_id"}},
     {"masternodes", "getmasternodeblocks",   &getmasternodeblocks,   {"identifier", "depth"}},
     {"masternodes", "listcriminalproofs",    &listcriminalproofs,    {}},
+    {"masternodes", "getanchorteams",        &getanchorteams,        {"blockHeight"}},
     {"tokens",      "createtoken",           &createtoken,           {"metadata", "inputs"}},
     {"tokens",      "updatetoken",           &updatetoken,           {"token", "metadata", "inputs"}},
     {"tokens",      "listtokens",            &listtokens,            {"pagination", "verbose"}},

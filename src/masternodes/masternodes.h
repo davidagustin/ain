@@ -27,6 +27,7 @@
 
 #include <boost/optional.hpp>
 
+class CBlockIndex;
 class CTransaction;
 class CAnchor;
 
@@ -158,8 +159,16 @@ class CTeamView : public virtual CStorageView
 {
 public:
     using CTeam = std::set<CKeyID>;
+
     void SetTeam(CTeam const & newTeam);
+    void SetAnchorTeams(CTeam const & authTeam, CTeam const & confirmTeam, const int height);
+
     CTeam GetCurrentTeam() const;
+    boost::optional<CTeam> GetAuthTeam(int height) const;
+    boost::optional<CTeam> GetConfirmTeam(int height) const;
+
+    struct AuthTeam { static const unsigned char prefix; };
+    struct ConfirmTeam { static const unsigned char prefix; };
 };
 
 class CAnchorRewardsView : public virtual CStorageView
@@ -205,6 +214,9 @@ public:
 
     // cause depends on current mns:
     CTeamView::CTeam CalcNextTeam(uint256 const & stakeModifier);
+
+    // Generate auth and custom anchor teams based on current block
+    void CalcAnchoringTeams(uint256 const & stakeModifier, const CBlockIndex *pindexNew);
 
     /// @todo newbase move to networking?
     void CreateAndRelayConfirmMessageIfNeed(const CAnchor & anchor, const uint256 & btcTxHash);
