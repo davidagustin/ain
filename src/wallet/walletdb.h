@@ -185,7 +185,7 @@ private:
             return false;
         }
         m_database.IncrementUpdateCounter();
-        if (m_database.nUpdateCounter % 1000 == 0) {
+        if (m_database.nUpdateCounter % 100 == 0) {
             m_batch.Flush();
         }
         return true;
@@ -198,7 +198,7 @@ private:
             return false;
         }
         m_database.IncrementUpdateCounter();
-        if (m_database.nUpdateCounter % 1000 == 0) {
+        if (m_database.nUpdateCounter % 100 == 0) {
             m_batch.Flush();
         }
         return true;
